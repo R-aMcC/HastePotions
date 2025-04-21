@@ -1,6 +1,7 @@
 package xyz.wyan.hastepotions.events;
 
 import org.bukkit.Material;
+import org.bukkit.block.BrewingStand;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -36,9 +37,6 @@ public class PotionEvent implements Listener {
             return;
         }
         event.setCancelled(true);
-        HastePotions.logger.info("Clicked Inventory: " + inv.getType());
-        HastePotions.logger.info("Holder: " + inv.getHolder());
-        HastePotions.logger.info("Clicked Slot: " + event.getSlot());
 
         Player p = (Player) event.getView().getPlayer();
 
@@ -120,6 +118,12 @@ public class PotionEvent implements Listener {
         }
 
          */
+        BrewingStand stand = (BrewingStand) inv.getHolder();
+        if(stand == null || stand.getFuelLevel() <= 0){
+            HastePotions.logger.info("No fuel found, not brewing.");
+            return;
+        }
+        HastePotions.logger.info(""+stand.getFuelLevel());
         recipe.startBrewing((BrewerInventory) inv);
 
     }

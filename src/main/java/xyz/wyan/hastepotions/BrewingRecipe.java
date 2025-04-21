@@ -4,6 +4,10 @@ import org.bukkit.Material;
 import org.bukkit.block.BrewingStand;
 import org.bukkit.inventory.BrewerInventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.PotionMeta;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionType;
 import org.bukkit.scheduler.BukkitRunnable;
 import xyz.wyan.hastepotions.actions.BrewAction;
 
@@ -11,6 +15,7 @@ public class BrewingRecipe {
 
     private final ItemStack ingredient;
     private final ItemStack fuel;
+    private final ItemStack base;
 
     private int fuelSet;
     private int fuelCharge;
@@ -20,15 +25,16 @@ public class BrewingRecipe {
 
     private boolean perfect;
 
-    public BrewingRecipe(ItemStack ingredient, ItemStack fuel, BrewAction action, boolean perfect, int fuelSet, int fuelCharge) {
+    public BrewingRecipe(ItemStack ingredient, ItemStack base, ItemStack fuel, BrewAction action, boolean perfect, int fuelSet, int fuelCharge) {
         this.ingredient = ingredient;
         this.fuel = (fuel == null ? new ItemStack(Material.AIR) : fuel);
         this.fuelSet = fuelSet;
         this.fuelCharge = fuelCharge;
         this.action = action;
+        this.base = base;
     }
-    public BrewingRecipe(Material ingredient, BrewAction action) {
-        this(new ItemStack(ingredient), null, action, true, 40, 0);
+    public BrewingRecipe(Material ingredient, ItemStack base, BrewAction action) {
+        this(new ItemStack(ingredient), base, null, action, true, 40, 1);
     }
 
     public ItemStack getIngredient() {
@@ -82,14 +88,37 @@ public class BrewingRecipe {
         this.fuelCharge = fuelCharge;
     }
 
+    public ItemStack getBase() {
+        return base;
+    }
+
     public static BrewingRecipe getRecipe(BrewerInventory inventory){
         for(BrewingRecipe recipe: HastePotions.recipes) {
+            PotionMeta baseMeta = (PotionMeta) recipe.getBase().getItemMeta();
+            if((!recipe.isPerfect() && inventory.getIngredient().getType() == recipe.getIngredient().getType()) || (recipe.isPerfect() && inventory.getIngredient().isSimilar(recipe.getIngredient()))){
+                for(int i = 0; i < 3; i++) {
+                    ItemStack item = inventory.getItem(i);
+                    if (item == null) {
+                        continue;
+                    }
 
-            if(!recipe.isPerfect() && inventory.getIngredient().getType() == recipe.getIngredient().getType()){
-                return recipe;
-            }
-            if (recipe.isPerfect() && inventory.getIngredient().isSimilar(recipe.getIngredient())){
-                return recipe;
+
+                    ItemMeta meta = item.getItemMeta();
+                    PotionMeta potionMeta = (PotionMeta) meta;
+
+                    if(potionMeta.getBasePotionType() == baseMeta.getBasePotionType() && potionMeta.getCustomEffects().isEmpty() && baseMeta.getCustomEffects().isEmpty()){
+                        HastePotions.logger.info("Found recipe for " + inventory.getIngredient().getType() + " with base potion type " + baseMeta.getBasePotionType());
+                        return recipe;
+                    }
+
+
+                    for (PotionEffect effect : baseMeta.getCustomEffects()) {
+                        if (potionMeta.getCustomEffects().stream().anyMatch(e -> e.getType().equals(effect.getType()) && e.getAmplifier() == effect.getAmplifier() && e.getDuration() == effect.getDuration())){
+                            HastePotions.logger.info("Found recipe for " + inventory.getIngredient().getType() + " with custom effect potion");
+                            return recipe;
+                        }
+                    }
+                }
             }
         }
         HastePotions.logger.info("No recipe found for " + inventory.getIngredient().getType());
@@ -119,37 +148,23 @@ public class BrewingRecipe {
         @Override
         public void run() {
             if (current == 0) {
+                int oldFuel = stand.getFuelLevel();
+                stand.setFuelLevel(oldFuel- recipe.fuelCharge);
+                stand.update(true);
+                HastePotions.logger.info("Brewing complete, fuel charge: "+ oldFuel + " -> " + stand.getFuelLevel() + "("+ recipe.fuelCharge + ")");
+
                 if (inventory.getIngredient().getAmount() > 1) {
                     inventory.getIngredient().setAmount(inventory.getIngredient().getAmount() - 1);
                 } else {
                     inventory.setIngredient(new ItemStack(Material.AIR));
                 }
 
-
-                ItemStack newFuel = recipe.getFuel();
-                if (recipe.getFuel() != null && recipe.getFuel().getType() != Material.AIR && recipe.getFuel().getAmount() > 0) {
-                    int count = 0;
-                    while (inventory.getFuel().getAmount() > 0 && stand.getFuelLevel() + recipe.fuelCharge < 100) {
-                        stand.setFuelLevel(stand.getFuelLevel() + recipe.fuelSet);
-                        count++;
-                    }
-                    if (inventory.getFuel().getAmount() == 0) {
-                        newFuel = new ItemStack(Material.AIR);
-                    } else {
-                        stand.setFuelLevel(100);
-                        newFuel.setAmount(inventory.getFuel().getAmount() - count);
-                    }
-                } else {
-                    newFuel = new ItemStack(Material.AIR);
-                }
-                inventory.setFuel(newFuel);
                 for (int i = 0; i < 3; i++) {
                     if (inventory.getItem(i) == null || inventory.getItem(i).getType() == Material.AIR) {
                         continue;
                     }
                     recipe.getAction().brew(inventory, inventory.getItem(i), ingredient);
                 }
-                stand.setFuelLevel(stand.getFuelLevel() - recipe.fuelCharge);
                 cancel();
                 return;
             }
@@ -157,7 +172,6 @@ public class BrewingRecipe {
                 cancel();
                 return;
             }
-
             current--;
             stand.setBrewingTime(current);
             stand.update(true);
