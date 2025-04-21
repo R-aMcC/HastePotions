@@ -1,0 +1,4 @@
+name: HastePotions
+version: '${version}'
+main: xyz.wyan.hastepotions.HastePotions
+api-version: '1.21'
